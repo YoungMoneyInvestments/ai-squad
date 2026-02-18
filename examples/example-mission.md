@@ -10,7 +10,7 @@ squad run -f examples/example-mission.md
 
 Each agent: read this mission, then do your part and save your report to the path given in your inbox file.
 
-**Cami:** Focus on high-level risks and process (security, consistency).  
+**OpenClaw agent:** Focus on high-level risks and process (security, consistency).  
 **Claude:** Focus on code quality and tests.  
 **Gemini:** Focus on APIs and integration.  
 **Auto:** Focus on docs and user-facing behavior.

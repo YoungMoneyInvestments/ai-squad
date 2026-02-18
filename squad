@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Squad CLI: orchestrate multiple AI agents across tmux panes via a file-based
-message bus. One command dispatches to Cami, Claude Code, Gemini, Auto, etc.;
+message bus. One command dispatches to your agents (e.g. OpenClaw, Claude Code, Gemini, Cursor);
 they read missions from disk and write reports back; you aggregate and review.
 """
 
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 # ANSI colors (bright) for agent output; reset and no-color sentinel
 _RESET = "\033[0m"
 _AGENT_COLORS = [
-    "\033[1;36m",   # cyan  (Cami)
+    "\033[1;36m",   # cyan  (first agent)
     "\033[1;35m",   # magenta (Claude)
     "\033[1;32m",   # green (Gemini)
     "\033[1;34m",   # blue (Auto)

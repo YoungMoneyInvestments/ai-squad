@@ -1,6 +1,6 @@
 # Squad CLI — Make multiple AI agents work like a team (tmux + files)
 
-You’ve got multiple agents (Claude Code, Gemini, Cursor/Auto, OpenClaw/Cami…) and a single human brain. **Squad** gives you a lightweight way to issue one mission, let each agent do work in their own terminal, and then **collect results back into one color-coded stream**.
+You’ve got multiple agents (Claude Code, Gemini, Cursor/Auto, OpenClaw…) and a single human brain. **Squad** gives you a lightweight way to issue one mission, let each agent do work in their own terminal, and then **collect results back into one color-coded stream**.
 
 This is not another “agent framework.” It’s a pragmatic operator tool:
 
@@ -167,6 +167,6 @@ ln -s \"$HOME/ai-squad/squad\" /usr/local/bin/squad   # or ~/bin/squad
 - **Agents “didn’t get it”:** The CLI sends a pointer (path) into the pane. The agent (or you) must open that inbox file and follow it.
 - **Reports missing:** The report path is in the inbox file. The outbox filename must match the mission ID.
 
-## Cami (OpenClaw)
+## OpenClaw
 
-If you want one pane to be “Cami” via OpenClaw, set that agent’s `launch` to `openclaw tui` (or whatever command you use). See [CAMI_OPENCLAW.md](CAMI_OPENCLAW.md).
+If one pane runs your OpenClaw agent, set that agent's `launch` to `openclaw tui` (or whatever command you use). See [OPENCLAW.md](OPENCLAW.md).

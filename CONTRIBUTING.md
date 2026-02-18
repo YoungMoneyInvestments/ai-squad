@@ -9,7 +9,7 @@ Thanks for considering contributing.
 
 ## What to touch
 
-- **Safe to edit:** `squad`, `config.example.json`, `README.md`, `CAMI_OPENCLAW.md`, `CONTRIBUTING.md`, files in `examples/`.
+- **Safe to edit:** `squad`, `config.example.json`, `README.md`, `OPENCLAW.md`, `CONTRIBUTING.md`, files in `examples/`.
 - **Do not commit:** `config.json` (user config), anything under `workspace/` (missions and reports). These are in `.gitignore`.
 
 ## Running locally
