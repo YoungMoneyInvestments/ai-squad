@@ -5,7 +5,7 @@ Run one command; Cami (Open Claw), Claude Code, Gemini, and Auto (Cursor) each g
 ## Quick start
 
 ```bash
-git clone <this-repo-url> ~/ai-squad ~/ai-squad
+git clone <this-repo-url> ~/ai-squad
 cd ~/ai-squad
 python3 squad setup          # copies config.example.json → config.json, creates workspace
 # Edit config.json with your tmux pane IDs and launch commands for each agent
