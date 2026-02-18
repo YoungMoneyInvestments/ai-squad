@@ -1,141 +1,172 @@
-# Squad CLI — Multi-Agent Orchestration with tmux
+# Squad CLI — Make multiple AI agents work like a team (tmux + files)
 
-Run one command; Cami (Open Claw), Claude Code, Gemini, and Auto (Cursor) each get the same mission in their tmux pane. They read from a shared workspace, do work, write reports back. You aggregate and review in one window, color-coded by agent.
+You’ve got multiple agents (Claude Code, Gemini, Cursor/Auto, OpenClaw/Cami…) and a single human brain. **Squad** gives you a lightweight way to issue one mission, let each agent do work in their own terminal, and then **collect results back into one color-coded stream**.
+
+This is not another “agent framework.” It’s a pragmatic operator tool:
+
+- **No new APIs**
+- **No plugins**
+- **No vendor lock-in**
+- **Just tmux + a shared folder + a tiny CLI**
+
+## What you get (features + benefits)
+
+- **Broadcast missions**: One command sends the same mission pointer to every agent pane.
+- **Targeted messages**: Nudge one agent without spamming the whole team (`squad send` or `@agent …` in chat).
+- **One command-center prompt**: `squad chat` lets you keep typing tasks repeatedly (broadcast or targeted) without switching panes.
+- **Color-coded aggregation**: `squad watch` streams reports into your main window, color-coded by agent, so you can triage fast.
+- **Safe by default**: Your local `config.json` and `workspace/` (missions + reports) are **gitignored**.
+- **Agent-agnostic**: Works with any interactive CLI that can read a file and write a file.
+
+## How it works (mental model)
+
+Squad is basically a file-based message bus with tmux notifications:
+
+```
+You (command center)          Agents (tmux panes)                   Back to you
+---------------------         --------------------                  ----------
+squad run "mission"  ───▶     pane gets: inbox path     ───▶        agent writes report
+ mission written to disk       agent reads mission                  outbox/*.md appears
+ per-agent inbox created       agent does work                      squad watch/report prints
+ tmux send-keys notification
+```
+
+Each mission creates:
+
+- `workspace/missions/<MISSION_ID>_mission.md`
+- `workspace/inbox/<agent_id>/<MISSION_ID>.txt` (contains the mission path + report path)
+- `workspace/outbox/<agent_id>/<MISSION_ID>.md` (agent writes this when done)
 
 ## Quick start
 
 ```bash
-git clone <this-repo-url> ~/ai-squad
+git clone https://github.com/YoungMoneyInvestments/ai-squad.git ~/ai-squad
 cd ~/ai-squad
-python3 squad setup          # copies config.example.json → config.json, creates workspace
-# Edit config.json with your tmux pane IDs and launch commands for each agent
-python3 squad up             # create/attach tmux session; in each pane, hit Enter to start that agent
-# From another terminal:
-python3 squad run "Your mission for everyone"
-python3 squad watch 20250217_143022   # stream color-coded reports as they arrive
+python3 squad setup          # creates config.json (if missing) + workspace dirs
+${EDITOR:-nano} config.json  # set tmux panes + launch commands
+python3 squad up             # create/attach tmux session; start each agent in its pane
+
+# From another terminal (your command center):
+python3 squad test
+python3 squad watch 20250217_143022
 ```
 
-[Add the repo to your PATH](#run-from-anywhere) to use `squad` from any directory.
+If you add `~/ai-squad` to your `PATH`, you can run commands as `squad ...` instead of `python3 squad ...`.
 
-## Table of contents
+## Commands (operator’s cheat sheet)
 
-- [How it works](#how-it-works)
-- [Setup](#setup)
-- [Commands](#commands)
-- [Runbook: first mission](#runbook-first-mission)
-- [Chat mode: one pane to message all](#chat-mode-one-pane-to-message-all)
-- [Color-coded reports](#color-coded-reports)
-- [Run from anywhere](#run-from-anywhere)
-- [Requirements](#requirements)
-- [Troubleshooting](#troubleshooting)
-- [Cami (OpenClaw)](#cami-openclaw)
+| Command | Use it for |
+|--------|------------|
+| `squad setup` | First run: create `config.json` (if missing) + workspace dirs. |
+| `squad doctor` | Sanity-check tmux, config, session, panes, workspace permissions. |
+| `squad up` | Create/attach the tmux session and print pane→agent map. |
+| `squad run "task"` / `squad run -f file` | Broadcast a mission to all agents. |
+| `squad test` | Smoke test the pipeline (agents write “received”). |
+| `squad send <agent_id> "msg"` | Message one agent only (inbox + tmux notify). |
+| `squad handoff --from X --to Y "task"` | Formal “agent A → agent B” delegation. |
+| `squad status [mission_id]` | Who’s done vs pending (color-coded). |
+| `squad report <mission_id>` | Print all reports for one mission (color-coded). |
+| `squad watch <mission_id>` | Stream reports as they arrive (color-coded). |
+| `squad chat` | Interactive command center: broadcast by default; `@agent …` targets one. |
 
-## How it works
-
-- **File-based message bus**: Missions live in `workspace/missions/`. Each agent has `inbox/<agent_id>/` and `outbox/<agent_id>/`.
-- **tmux**: The CLI uses `tmux send-keys` to paste a one-liner into each pane: "Mission at path X — read it, do it, save your report to path Y."
-- **No APIs required**: Each pane runs whatever interactive CLI you already use (Cursor, Open Claw, Gemini, etc.). They read a file and write a file; you (or the AI in that pane) do the rest.
-
-**Does starting one CLI pull in the others?** No. Each agent must be running in its own tmux pane. Run `squad up` to create/attach the session, start each agent in its pane, then from any terminal `squad run "..."` notifies all of them.
-
-**Free mode:** Set a `launch` command per agent in `config.json` (e.g. `gemini --yolo`, `cursor-agent -f`, `claude --dangerously-skip-permissions`, `openclaw tui` for Cami) so they don’t block on permission prompts. `squad up` pre-fills each pane with that command.
+Use `--no-color` with `status`, `report`, or `watch` (or set `NO_COLOR=1`) for plain output.
 
 ## Setup
 
-### 1. One-time: config and workspace
+### 1) Run setup (creates config + workspace)
 
 ```bash
 cd ~/ai-squad
 python3 squad setup
 ```
 
-This copies `config.example.json` → `config.json` (if missing) and creates the workspace directories. Then edit `config.json`:
+### 2) Edit `config.json`
 
 | Key | Meaning |
 |-----|--------|
-| `tmux_session` | Tmux session name (e.g. `squad`). |
-| `workspace` | Path for missions, inbox, outbox (e.g. `~/ai-squad/workspace`). |
-| `agents` | List of `{ "id", "name", "tmux", "launch" }`. Use pane IDs like `squad:0.0` … `squad:0.3` (one window, four panes). `launch` is the command run in that pane (e.g. `openclaw tui`, `claude --dangerously-skip-permissions`, `gemini --yolo`, `cursor-agent -f`). |
+| `tmux_session` | Tmux session name (default: `squad`). |
+| `workspace` | Where missions/inbox/outbox live (default: `~/ai-squad/workspace`). |
+| `agents` | List of `{ id, name, tmux, launch }`. `tmux` targets are panes like `squad:0.0` … `squad:0.3` (one window, four panes). `launch` is what you run in that pane (e.g. `openclaw tui`, `claude --dangerously-skip-permissions`, `gemini --yolo`, `cursor-agent -f`). |
 
-See [CAMI_OPENCLAW.md](CAMI_OPENCLAW.md) if you use OpenClaw in one pane.
+### 3) Start the squad session
 
-### 2. Tmux session and panes
+```bash
+python3 squad up
+```
 
-Run `squad up`. It creates the `squad` tmux session (if needed), prints which pane is for which agent, then attaches you. In each pane, run the printed launch command (or hit Enter if it’s already there). Use **Ctrl+b** then **arrow keys** to switch panes.
+In each pane, run the printed `launch` command (or just hit Enter if it’s already typed). Use **Ctrl+b → arrow keys** to switch panes.
 
-### 3. Validate (optional)
+### 4) Validate (optional but useful)
 
 ```bash
 python3 squad doctor
 ```
 
-Checks that config is valid, tmux is installed, and the squad session and panes exist.
+## Runbook: your first real mission
 
-## Commands
+1. `python3 squad up` (start agents in their panes)
+2. From your command center terminal:
+   - `python3 squad run "Do X, each of you focus on a different angle."`
+   - or: `python3 squad run -f examples/example-mission.md`
+3. Watch results:
+   - `python3 squad watch <MISSION_ID>` (best UX)
+   - or: `python3 squad status <MISSION_ID>` then `python3 squad report <MISSION_ID>`
 
-| Command | Purpose |
-|--------|--------|
-| `squad setup` | Copy example config → config.json (if missing) and create workspace dirs. |
-| `squad doctor` | Validate config, tmux, and session/panes. |
-| `squad up` | Create or attach to the squad tmux session; print pane→agent map. |
-| `squad run "task"` or `squad run -f file` | Create a mission and notify all panes. |
-| `squad test` | Dispatch a smoke-test mission. |
-| `squad status [mission_id]` | List missions or show who has reported (color-coded). |
-| `squad report <mission_id>` | Print all agents’ reports (color-coded). |
-| `squad watch <mission_id>` | Stream reports into this window as they arrive (color-coded). |
-| `squad chat` | Interactive: type to broadcast; `@agent message` to message one agent. |
-| `squad send <agent_id> "message"` | Send a message to one agent only. |
-| `squad handoff --from X --to Y "task"` | Put a task in Y’s inbox and notify Y’s pane. |
+## Chat mode: one pane to message all (repeatedly)
 
-Use `--no-color` with `report`, `status`, or `watch` to disable colors. Set `NO_COLOR=1` in the environment for the same effect.
+Run:
 
-## Runbook: first mission
+```bash
+python3 squad chat
+```
 
-1. **Setup:** `squad setup` → edit `config.json` → `squad up` → start each agent in its pane (Enter).
-2. **From another terminal:** `squad test` → note the mission ID printed.
-3. **In each agent pane:** Open the inbox path that was pasted, do the one-liner, save the report to the outbox path from the inbox.
-4. **Check:** `squad status <id>` then `squad report <id>` (or `squad watch <id>` to stream as they arrive).
+Then:
 
-## Chat mode: one pane to message all
+- Type a line → broadcasts to all agents.
+- `@gemini do the API` → messages only Gemini.
+- `/watch <id>` → stream reports here.
+- `/quit` → exit.
 
-Run `squad chat` in a dedicated terminal. You get a `squad>` prompt. Type a line and Enter to **broadcast to all agents**. Type **`@agent_id message`** (e.g. `@gemini do the API`) to message only that agent. Use **`/status`**, **`/report <id>`**, **`/watch <id>`**, **`/quit`** without leaving chat.
+## Color-coded reports (why it matters)
 
-## Color-coded reports
+When you’re running 3–6 agents at once, raw output becomes noise. Squad makes it scannable:
 
-- **`squad report <id>`** and **`squad watch <id>`** print each agent’s output with a colored header (Cami=cyan, Claude=magenta, Gemini=green, Auto=blue).
-- **`squad status <id>`** shows agent names in green (done) or dim yellow (pending).
+- `squad watch <id>` prints each agent’s report as it arrives, with a **colored header per agent**.
+- `squad status <id>` prints “done” vs “pending” with **status colors**.
+
+## Privacy & safety
+
+This repo is designed to be shareable without leaking your stuff:
+
+- **Not committed (gitignored):** `config.json`, `workspace/`, `.env*`, `.claude/`, `secrets/`, keys, etc.
+- **Committed:** `config.example.json` (template), `squad` script, docs, examples.
 
 ## Run from anywhere
 
-Add the repo to your PATH so you can run `squad` from any directory:
+Add the repo to your PATH:
 
 ```bash
-# Bash/Zsh: add to ~/.bashrc or ~/.zshrc
-export PATH="$HOME/ai-squad:$PATH"
-# Then:
-squad up
-squad run "Mission here"
+export PATH=\"$HOME/ai-squad:$PATH\"   # put in ~/.zshrc or ~/.bashrc
 ```
 
-Or symlink the script:
+Or symlink:
 
 ```bash
-ln -s "$HOME/ai-squad/squad" /usr/local/bin/squad   # or ~/bin/squad
+ln -s \"$HOME/ai-squad/squad\" /usr/local/bin/squad   # or ~/bin/squad
 ```
 
 ## Requirements
 
 - Python 3.9+
 - tmux
-- No extra pip packages (stdlib only)
+- Your agent CLIs of choice (Claude Code, Gemini CLI, Cursor agent, OpenClaw, etc.)
 
-## Troubleshooting
+## Troubleshooting (common operator mistakes)
 
-- **"Could not send to squad:0.0"**: Tmux session or pane doesn’t exist. Run `tmux list-panes -s` to see targets. Use **`squad:0.0`**, **`squad:0.1`**, **`squad:0.2`**, **`squad:0.3`** (one window, four panes).
-- **Agents don’t see missions**: They must open the path that’s pasted; the CLI only sends the pointer.
-- **Reports not showing**: Each agent must write to `workspace/outbox/<agent_id>/<mission_id>.md` (path is in the inbox file).
-- **Config not found**: Run `squad setup` or `cp config.example.json config.json` and edit.
+- **Wrong tmux targets:** Use panes in a single window: `squad:0.0`, `squad:0.1`, `squad:0.2`, `squad:0.3`. (If you use `squad:1.0` you’re targeting *window 1*, not “row 2”.)
+- **Agents “didn’t get it”:** The CLI sends a pointer (path) into the pane. The agent (or you) must open that inbox file and follow it.
+- **Reports missing:** The report path is in the inbox file. The outbox filename must match the mission ID.
 
 ## Cami (OpenClaw)
 
-If one pane runs OpenClaw (Cami), set that agent’s `launch` to `openclaw tui` (or whatever command you use). See [CAMI_OPENCLAW.md](CAMI_OPENCLAW.md) for details. No need to reinstall OpenClaw if you already have it.
+If you want one pane to be “Cami” via OpenClaw, set that agent’s `launch` to `openclaw tui` (or whatever command you use). See [CAMI_OPENCLAW.md](CAMI_OPENCLAW.md).
