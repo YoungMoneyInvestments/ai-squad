@@ -1,0 +1,27 @@
+# User config (contains local paths and launch commands; use config.example.json as template)
+config.json
+
+# Workspace data (missions, inbox, outbox — may contain sensitive content)
+workspace/
+
+# Environment and secrets
+.env
+.env.*
+*.key
+*.pem
+secrets/
+
+# IDE and OS
+.claude/
+.idea/
+.vscode/
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs
+*.log
