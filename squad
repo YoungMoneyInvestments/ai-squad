@@ -8,11 +8,12 @@ they read missions from disk and write reports back; you aggregate and review.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ANSI colors (bright) for agent output; reset and no-color sentinel
 _RESET = "\033[0m"
@@ -106,7 +107,7 @@ def tmux_send_enter(target: str) -> None:
 def cmd_run(config: dict, mission_text: str) -> None:
     workspace = get_workspace_root(config)
     ensure_workspace(workspace, config)
-    mission_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    mission_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     mission_path = workspace / "missions" / f"{mission_id}_mission.md"
     mission_path.write_text(mission_text.strip() + "\n", encoding="utf-8")
 
@@ -193,7 +194,7 @@ def cmd_handoff(config: dict, from_agent: str, to_agent: str, task: str) -> None
     if to_agent not in agents_by_id:
         raise SystemExit(f"Unknown agent: {to_agent}. Choose from: {list(agents_by_id)}")
 
-    handoff_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    handoff_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     inbox_path = workspace / "inbox" / to_agent / f"handoff_{handoff_id}.txt"
     inbox_path.write_text(f"Handoff from {from_agent}:\n\n{task}\n", encoding="utf-8")
 
@@ -302,6 +303,69 @@ def cmd_watch(config: dict, mission_id: str, interval: float = 2.0, use_color: b
         print(f"\nStopped. {len(printed)}/{len(agents)} reports so far.")
 
 
+def cmd_setup() -> None:
+    """Copy config.example.json → config.json if missing; create workspace dirs. Safe to run multiple times."""
+    config_path = get_config_path()
+    example_path = Path(__file__).resolve().parent / "config.example.json"
+    if not config_path.exists():
+        if not example_path.exists():
+            raise SystemExit(f"Neither {config_path} nor {example_path} found.")
+        shutil.copy(example_path, config_path)
+        print(f"Created {config_path} from config.example.json")
+    else:
+        print(f"Config already exists: {config_path}")
+    config = load_config()
+    workspace = get_workspace_root(config)
+    ensure_workspace(workspace, config)
+    print(f"Workspace ready: {workspace}")
+    print("Next: edit config.json (tmux panes + launch commands), then run squad up")
+
+
+def cmd_doctor(config: dict) -> None:
+    """Validate config, tmux, and squad session/panes."""
+    ok = True
+    try:
+        subprocess.run(["tmux", "-V"], capture_output=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        print("tmux: not found or not runnable")
+        ok = False
+    else:
+        print("tmux: OK")
+    session = config.get("tmux_session", "squad")
+    try:
+        result = subprocess.run(["tmux", "has-session", "-t", session], capture_output=True, check=False)
+        if result.returncode != 0:
+            print(f"Session '{session}': not found (run squad up to create)")
+            ok = False
+        else:
+            print(f"Session '{session}': exists")
+            for agent in get_agents_from_config(config):
+                target = agent.get("tmux", "")
+                if ":" not in target:
+                    target = f"{session}:{target}"
+                try:
+                    subprocess.run(["tmux", "display-message", "-t", target, "-p", ""], capture_output=True, check=True)
+                    print(f"  Pane {target}: OK")
+                except subprocess.CalledProcessError:
+                    print(f"  Pane {target}: not found")
+                    ok = False
+    except Exception as e:
+        print(f"Session check failed: {e}")
+        ok = False
+    workspace = get_workspace_root(config)
+    if workspace.exists() and os.access(workspace, os.W_OK):
+        print(f"Workspace {workspace}: writable")
+    else:
+        workspace.mkdir(parents=True, exist_ok=True)
+        if os.access(workspace, os.W_OK):
+            print(f"Workspace {workspace}: created and writable")
+        else:
+            print(f"Workspace {workspace}: not writable")
+            ok = False
+    if not ok:
+        sys.exit(1)
+
+
 def cmd_send_one(config: dict, agent_id: str, message: str) -> None:
     """Send a message to one agent only (inbox + tmux notify)."""
     workspace = get_workspace_root(config)
@@ -310,7 +374,7 @@ def cmd_send_one(config: dict, agent_id: str, message: str) -> None:
     if agent_id not in agents_by_id:
         raise SystemExit(f"Unknown agent: {agent_id}. Choose from: {list(agents_by_id)}")
 
-    msg_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    msg_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     inbox_path = workspace / "inbox" / agent_id / f"msg_{msg_id}.txt"
     inbox_path.write_text(message.strip() + "\n", encoding="utf-8")
 
@@ -418,9 +482,18 @@ def main() -> None:
     watch_p.add_argument("mission_id", help="Mission ID")
     watch_p.add_argument("--interval", "-n", type=float, default=2.0, help="Poll interval in seconds (default: 2)")
     watch_p.add_argument("--no-color", action="store_true", help="Disable colored output")
+    sub.add_parser("setup", help="Copy config.example.json → config.json if missing; create workspace")
+    sub.add_parser("doctor", help="Validate config, tmux, and squad session/panes")
 
     args = parser.parse_args()
+
+    if args.command == "setup":
+        cmd_setup()
+        return
     config = load_config()
+    if args.command == "doctor":
+        cmd_doctor(config)
+        return
 
     if args.command == "run":
         if args.file:
