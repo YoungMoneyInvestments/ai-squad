@@ -14,6 +14,7 @@ import sys
 import time
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional, Set, Tuple
 
 # ANSI colors (bright) for agent output; reset and no-color sentinel
 _RESET = "\033[0m"
@@ -35,7 +36,7 @@ def _use_color() -> bool:
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 
-def _agent_color(agent_index: int, use_color: bool) -> tuple[str, str]:
+def _agent_color(agent_index: int, use_color: bool) -> Tuple[str, str]:
     if not use_color:
         return "", ""
     c = _AGENT_COLORS[agent_index % len(_AGENT_COLORS)]
@@ -77,7 +78,7 @@ def get_workspace_root(config: dict) -> Path:
     return Path(raw).expanduser().resolve()
 
 
-def ensure_workspace(workspace: Path, config: dict | None = None) -> None:
+def ensure_workspace(workspace: Path, config: Optional[dict] = None) -> None:
     (workspace / "missions").mkdir(parents=True, exist_ok=True)
     (workspace / "handoffs").mkdir(parents=True, exist_ok=True)
     for agent in get_agents_from_config(config):
@@ -85,7 +86,7 @@ def ensure_workspace(workspace: Path, config: dict | None = None) -> None:
         (workspace / "outbox" / agent["id"]).mkdir(parents=True, exist_ok=True)
 
 
-def get_agents_from_config(config: dict | None = None) -> list:
+def get_agents_from_config(config: Optional[dict] = None) -> list:
     if config is None:
         config = load_config()
     return config.get("agents", [])
@@ -142,7 +143,7 @@ def cmd_run(config: dict, mission_text: str) -> None:
     print(f"  Check reports: squad status {mission_id}")
 
 
-def cmd_status(config: dict, mission_id: str | None, use_color: bool | None = None) -> None:
+def cmd_status(config: dict, mission_id: Optional[str], use_color: Optional[bool] = None) -> None:
     if use_color is None:
         use_color = _use_color()
     workspace = get_workspace_root(config)
@@ -172,7 +173,7 @@ def cmd_status(config: dict, mission_id: str | None, use_color: bool | None = No
             print(mid)
 
 
-def cmd_report(config: dict, mission_id: str, use_color: bool | None = None) -> None:
+def cmd_report(config: dict, mission_id: str, use_color: Optional[bool] = None) -> None:
     if use_color is None:
         use_color = _use_color()
     workspace = get_workspace_root(config)
@@ -274,14 +275,14 @@ def cmd_test(config: dict) -> None:
     cmd_run(config, TEST_MISSION)
 
 
-def cmd_watch(config: dict, mission_id: str, interval: float = 2.0, use_color: bool | None = None) -> None:
+def cmd_watch(config: dict, mission_id: str, interval: float = 2.0, use_color: Optional[bool] = None) -> None:
     """Poll outbox and print each agent's report as it appears, color-coded. Exit when all in."""
     if use_color is None:
         use_color = _use_color()
     workspace = get_workspace_root(config)
     outbox = workspace / "outbox"
     agents = get_agents_from_config(config)
-    printed: set[str] = set()
+    printed: Set[str] = set()
 
     print(f"Watching for reports: mission {mission_id} (poll every {interval}s). Ctrl+C to stop.\n")
     try:
