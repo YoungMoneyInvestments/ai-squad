@@ -234,6 +234,10 @@ def cmd_up(config: dict) -> None:
         subprocess.run(["tmux", "split-window", "-t", f"{session}", "-v"], check=True)
         subprocess.run(["tmux", "select-pane", "-t", f"{session}:0.0"], check=True)
         subprocess.run(["tmux", "split-window", "-t", f"{session}", "-v"], check=True)
+        # Extra panes for 5+ agents (0.4, 0.5, ...)
+        for i in range(4, len(agents)):
+            subprocess.run(["tmux", "select-pane", "-t", f"{session}:0.{i - 1}"], check=True)
+            subprocess.run(["tmux", "split-window", "-t", f"{session}", "-v"], check=True)
         for i, agent in enumerate(agents):
             pane = agent.get("tmux", "").split(":")[-1] or f"0.{i}"
             target = f"{session}:{pane}"
@@ -264,7 +268,7 @@ def cmd_up(config: dict) -> None:
 
 TEST_MISSION = """Squad smoke test. Your only job:
 1. Read the inbox file path that was pasted into your pane.
-2. Reply with one short line: your agent name (Cami, Claude, Gemini, or Auto) and "received."
+2. Reply with one short line: your agent name (Cami, Claude, Gemini, Auto, or Codex) and "received."
 3. Save that line as your report to the exact outbox path listed in that inbox file.
 
 No other work required. This verifies the squad pipeline."""

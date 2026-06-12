@@ -5,6 +5,7 @@
     { "id": "openclaw", "name": "OpenClaw", "tmux": "squad:0.0", "launch": "openclaw tui" },
     { "id": "claude", "name": "Claude Code", "tmux": "squad:0.1", "launch": "claude --dangerously-skip-permissions" },
     { "id": "gemini", "name": "Gemini", "tmux": "squad:0.2", "launch": "gemini --yolo" },
-    { "id": "auto", "name": "Auto (Cursor)", "tmux": "squad:0.3", "launch": "cursor-agent -f" }
+    { "id": "auto", "name": "Auto (Cursor)", "tmux": "squad:0.3", "launch": "cursor-agent -f" },
+    { "id": "codex", "name": "Codex", "tmux": "squad:0.4", "launch": "codex --dangerously-bypass-approvals-and-sandbox" }
   ]
 }
